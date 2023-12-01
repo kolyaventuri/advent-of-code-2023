@@ -1,0 +1,4 @@
+.history/
+
+inputs/day*.txt
+!inputs/day*.test.txt
