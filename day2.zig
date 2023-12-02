@@ -8,6 +8,7 @@ pub fn main() !void {
 
     var allocator = std.heap.page_allocator;
     var games = std.ArrayList(i16).init(allocator);
+    var powers = std.ArrayList(i16).init(allocator);
 
     for (lines.items, 0..) |line, gameNumber| {
         if (line.len == 0) {
@@ -74,6 +75,8 @@ pub fn main() !void {
         }
 
         std.debug.print("    Max: {d}, {d}, {d}\n", .{ maxCubes[0], maxCubes[1], maxCubes[2] });
+        try powers.append(maxCubes[0] * maxCubes[1] * maxCubes[2]);
+
         if (maxCubes[0] <= targetCubes[0]) {
             if (maxCubes[1] <= targetCubes[1]) {
                 if (maxCubes[2] <= targetCubes[2]) {
@@ -89,5 +92,11 @@ pub fn main() !void {
     for (games.items) |game| {
         sum += game;
     }
-    std.debug.print("Sum: {d}\n", .{sum});
+
+    var totalPower: i32 = 0;
+    for (powers.items) |power| {
+        totalPower += power;
+    }
+    std.debug.print("Part1: {d}\n", .{sum});
+    std.debug.print("Part2: {d}\n", .{totalPower});
 }
