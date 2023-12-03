@@ -1,8 +1,12 @@
 const std = @import("std");
-const Loader = @import("utils/loader.zig");
+const String = @import("utils/string.zig");
 
 pub fn main() !void {
-    const lines = try Loader.loadFile("inputs/day1.txt");
+    const file = @embedFile("inputs/day1.txt");
+    var stringAllocator = std.heap.page_allocator;
+    const lines = try String.split(stringAllocator, file, "\n");
+
+    defer lines.deinit();
     const numbers = [9][]const u8{ "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
     const staticString = "Hello";
     _ = staticString;

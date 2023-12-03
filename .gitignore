@@ -2,3 +2,6 @@
 
 inputs/day*.txt
 !inputs/day*.test*.txt
+
+zig-out/
+zig-cache/
