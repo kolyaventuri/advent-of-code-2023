@@ -35,6 +35,11 @@ pub fn main() !void {
     defer lines.deinit();
 
     var totalScore: i32 = 0;
+    var card_allocator = std.heap.page_allocator;
+    var card_list = std.ArrayList(i32).init(card_allocator);
+    for (0..lines.items.len - 1) |_| {
+        try card_list.append(1);
+    }
 
     for (lines.items, 0..) |line, cardNum| {
         if (line.len == 0) {
@@ -50,7 +55,7 @@ pub fn main() !void {
         readCard(cards.items[0], &winningNumbers);
         readCard(cards.items[1], &playNumbers);
 
-        std.debug.print("Card {d}, winning: {d}, playing: {d}\n", .{ cardNum, winningNumbers, playNumbers });
+        //std.debug.print("Card {d} (have: {d}), winning: {d}, playing: {d}\n", .{ cardNum + 1, card_list.items[cardNum], winningNumbers, playNumbers });
         var pow: i8 = -1;
         for (winningNumbers) |num| {
             for (playNumbers) |win| {
@@ -65,10 +70,30 @@ pub fn main() !void {
             }
         }
 
+        if (pow > -1) {
+            const times: i32 = if (card_list.items[cardNum] == 0) 1 else card_list.items[cardNum];
+            const times_usize = @as(usize, @intCast(times));
+            //std.debug.print("\ttimes_usize: {d}\n", .{times_usize});
+            for (0..times_usize) |_| {
+                const pow_pos = if (pow < 0) 0 else pow;
+                const max: usize = cardNum + @as(usize, @intCast(pow_pos)) + 2;
+                for ((cardNum + 1)..max) |index| {
+                    //std.debug.print("\tWins card {d}, now have {d}\n", .{ index + 1, card_list.items[index] + 1 });
+                    card_list.items[index] += 1;
+                }
+            }
+        }
+
         const result = if (pow == -1) 0 else std.math.pow(i32, 2, pow);
         totalScore += result;
-        std.debug.print("\tScore: {d}\n", .{result});
+        //std.debug.print("\tScore: {d}\n", .{result});
     }
 
     std.debug.print("\nPart 1: {d}\n", .{totalScore});
+
+    var total_cards: i32 = 0;
+    for (card_list.items) |card| {
+        total_cards += card;
+    }
+    std.debug.print("Part 2: {d}\n", .{total_cards});
 }
