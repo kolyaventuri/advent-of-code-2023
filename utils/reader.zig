@@ -33,7 +33,7 @@ pub fn readNumberLine(line: []const u8) !std.ArrayList(i64) {
 }
 
 const Result = struct {
-    _list: std.ArrayList(std.ArrayList(i64)),
+    list: std.ArrayList(std.ArrayList(i64)),
     items: []std.ArrayList(i64),
 
     pub fn deinit(self: Result) void {
@@ -41,7 +41,7 @@ const Result = struct {
             item.deinit();
         }
 
-        self._list.deinit();
+        self.list.deinit();
     }
 };
 
@@ -58,6 +58,6 @@ pub fn readNumbers(lines: [][]const u8) !Result {
         try line_list.append(result);
     }
 
-    const res = Result{ ._list = line_list, .items = line_list.items };
+    const res = Result{ .list = line_list, .items = line_list.items };
     return res;
 }
