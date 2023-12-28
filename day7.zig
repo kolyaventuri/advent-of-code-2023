@@ -36,7 +36,7 @@ fn scoreHand(hand: [5]std.ArrayList(u4)) u3 {
     for (hand) |h| {
         var value = h.items;
         if (value.len == 0) {
-            break;
+            continue;
         }
 
         if (value.len == 5) {
@@ -159,4 +159,82 @@ pub fn main() !void {
     }
 
     std.debug.print("Part 1: {d}\n", .{part1Total});
+
+    var p2_hands_list = std.ArrayList(Hand).init(allocator);
+    defer p2_hands_list.deinit();
+
+    for (hands_list.items, 0..) |hand, i| {
+        _ = i;
+        var cards = hand.cards;
+        var num_jacks: u4 = 0;
+        // Drop value of 12 (J) to 1
+        for (cards, 0..) |card, j| {
+            if (card == 12) {
+                cards[j] = 1;
+                num_jacks += 1;
+            }
+        }
+
+        var new_hand = [_]std.ArrayList(u4){std.ArrayList(u4).init(allocator)} ** 5;
+        for (new_hand) |h| {
+            defer h.deinit();
+        }
+
+        var count_jacks: u4 = 0;
+        for (hand.sets, 0..) |h, j| {
+            var new_set = std.ArrayList(u4).init(allocator);
+            for (h.items) |item| {
+                if (item == 12) {
+                    count_jacks += 1;
+                } else {
+                    try new_set.append(item);
+                }
+            }
+
+            new_hand[j] = new_set;
+        }
+
+        var max_size: u4 = 0;
+        var max_index: u4 = 4;
+        for (new_hand, 0..) |h, j| {
+            const size: u4 = @as(u4, @intCast(h.items.len));
+            if (size > max_size) {
+                max_size = size;
+                max_index = @as(u4, @intCast(j));
+            }
+        }
+
+        var j: u4 = 0;
+        while (j < count_jacks) {
+            try new_hand[max_index].append(12);
+            j += 1;
+        }
+
+        const score = scoreHand(new_hand);
+
+        try p2_hands_list.append(Hand{ .cards = cards, .sets = new_hand, .score = score, .bid = hand.bid });
+
+        // std.debug.print("{d}, jacks: {d}\n", .{ cards, count_jacks });
+        // for (new_hand) |h| {
+        //     std.debug.print("{d} ", .{h.items});
+        // }
+
+        // std.debug.print(" score: {d}\n", .{score});
+    }
+
+    var p2_total: u32 = 0;
+
+    std.mem.sort(Hand, p2_hands_list.items, {}, cmpHands);
+
+    for (p2_hands_list.items, 0..) |hand, i| {
+        // std.debug.print("cards = {d}, hand = ", .{hand.cards});
+        // for (hand.sets) |h| {
+        //     std.debug.print("{d} ", .{h.items});
+        // }
+        const rank = @as(u16, @intCast(p2_hands_list.items.len)) - @as(u16, @intCast(i));
+        // std.debug.print(", score = {d}, bid = {d}, rank = {d}\n", .{ hand.score, hand.bid, rank });
+        p2_total += @as(u32, hand.bid) * rank;
+    }
+
+    std.debug.print("Part 2: {d}\n", .{p2_total});
 }
