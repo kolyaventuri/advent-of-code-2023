@@ -51,24 +51,31 @@ pub fn main() !void {
     defer numberLine.deinit();
 
     var total_history: i64 = 0;
-    for (numberLine.items) |line| {
+    var part2_history: i64 = 0;
+    for (numberLine.items, 0..) |line, k| {
+        _ = k;
         const triangle = try generateTriangle(allocator, line);
         defer triangle.deinit();
 
-        const size: usize = triangle.items.len - 1;
-        var i: usize = size;
-        var last_history: i64 = 0;
+        var i: usize = triangle.items.len - 1;
+        var right_history: i64 = 0;
+        var left_history: i64 = 0;
 
         while (i > 0) {
             i -= 1;
             const curr = triangle.items[i].items;
-            const next_value = curr[curr.len - 1] + last_history;
-            last_history = next_value;
+            const next_value = curr[curr.len - 1] + right_history;
+            right_history = next_value;
+
+            const left_value = curr[0] - left_history;
+            left_history = left_value;
         }
 
-        // std.debug.print("Last : {d}\n", .{last_history});
-        total_history += last_history;
+        // std.debug.print("Line {d}: Right {d}, Left: {d}\n", .{ k + 1, right_history, left_history });
+        total_history += right_history;
+        part2_history += left_history;
     }
 
     std.debug.print("Part 1: {d}\n", .{total_history});
+    std.debug.print("Part 2: {d}\n", .{part2_history});
 }
