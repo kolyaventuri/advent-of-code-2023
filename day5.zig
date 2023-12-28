@@ -130,4 +130,88 @@ pub fn main() !void {
     }
 
     std.debug.print("Part 1: {d}\n", .{min});
+
+    // Part 2
+    // Get seed ranges
+    var value: i64 = -1;
+    var size: i64 = -1;
+    var seed_ranges = std.ArrayList([2]i64).init(allocator);
+    defer seed_ranges.deinit();
+
+    for (sections[0].items, 0..) |num, i| {
+        if (i % 2 == 0) {
+            // Start of range
+            value = num;
+        } else {
+            // Range size
+            size = num;
+        }
+
+        if (value > -1 and size > -1) {
+            try seed_ranges.append([2]i64{ value, size });
+
+            value = -1;
+            size = -1;
+        }
+    }
+
+    std.debug.print("{d}\n", .{seed_ranges.items});
+    var total: i64 = 0;
+    var max_seed: i64 = -1;
+    for (seed_ranges.items) |range| {
+        total += range[1];
+        const seed = range[0] + range[1] - 1;
+        if (seed > max_seed) {
+            max_seed = seed;
+        }
+    }
+    std.debug.print("{d} total seeds, largest is {d}\n", .{ total, max_seed });
+
+    var curr: i64 = 0;
+
+    while (true) {
+        // Iterate backwards through the maps
+        // std.debug.print("Location {d} maps back to...\n", .{curr});
+        var i: usize = 7;
+        var temp: i64 = curr;
+        while (i >= 1) {
+            const section = sections[i];
+            // std.debug.print("\tSection {d} ({d})...\n", .{ i, temp });
+
+            var j: usize = 0;
+            while (j < section.items.len) {
+                const destination = section.items[j];
+                const source = section.items[j + 1];
+                const length = section.items[j + 2];
+
+                if (temp >= destination and temp < destination + length) {
+                    // std.debug.print("\t\tMatch {d} -> {d} + {d} = {d}\n", .{ temp, destination, destination - source, temp - (source - destination) });
+                    temp += source - destination;
+                    break;
+                }
+
+                j += 3;
+            }
+
+            i -= 1;
+        }
+
+        // std.debug.print("\tResult: {d}\n", .{temp});
+        var found = false;
+        for (seed_ranges.items) |range| {
+            const min_range = range[0];
+            const max = range[0] + range[1] - 1;
+            if (temp >= min_range and temp <= max) {
+                // std.debug.print("\t\t{d} is in range {d} -> {d}\n", .{ temp, min_range, max });
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            break;
+        }
+        curr += 1;
+    }
+
+    std.debug.print("Part 2: {d}\n", .{curr});
 }
