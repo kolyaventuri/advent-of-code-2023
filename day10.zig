@@ -27,7 +27,7 @@ fn printTile(char: []const u8) void {
     std.debug.print("\x1B[0m", .{});
 }
 
-fn printGridPos(grid: std.ArrayList(std.ArrayList(Square)), x: ?usize, y: ?usize) void {
+fn printGridPos(grid: std.ArrayList(std.ArrayList(Square)), x: ?usize, y: ?usize, reject_neighbors: bool) void {
     for (grid.items, 0..) |line, y1| {
         for (line.items, 0..) |square, x1| {
             if (x1 == x and y1 == y) {
@@ -35,7 +35,11 @@ fn printGridPos(grid: std.ArrayList(std.ArrayList(Square)), x: ?usize, y: ?usize
                 std.debug.print("*", .{});
                 std.debug.print("\x1B[0m", .{});
             } else {
-                printTile(square.pipe.char);
+                if (reject_neighbors and !square.visited) {
+                    std.debug.print(" ", .{});
+                } else {
+                    printTile(square.pipe.char);
+                }
             }
         }
 
@@ -44,7 +48,51 @@ fn printGridPos(grid: std.ArrayList(std.ArrayList(Square)), x: ?usize, y: ?usize
 }
 
 fn printGrid(grid: std.ArrayList(std.ArrayList(Square))) void {
-    printGridPos(grid, null, null);
+    printGridPos(grid, null, null, false);
+}
+
+fn printGridRejectInvalidNeighbors(grid: std.ArrayList(std.ArrayList(Square))) void {
+    printGridPos(grid, null, null, true);
+}
+
+fn isInList(list: *std.ArrayList(*Square), square: *Square) bool {
+    for (list.items) |item| {
+        if (item.x == square.x and item.y == square.y) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+fn printGridColorLines(grid: std.ArrayList(std.ArrayList(Square)), start: *Square) !void {
+    var flat_list = std.ArrayList(*Square).init(std.heap.c_allocator);
+    defer flat_list.deinit();
+
+    var current: ?*Square = start;
+    while (current != null) {
+        if (current.?.visited) {
+            try flat_list.append(current.?);
+        }
+        if (current.?.parent == start) {
+            break;
+        }
+        current = current.?.parent;
+    }
+
+    for (grid.items) |line| {
+        for (line.items) |square| {
+            if (square.visited) {
+                std.debug.print("\x1B[31m", .{});
+                std.debug.print("{s}", .{square.pipe.char});
+                std.debug.print("\x1B[0m", .{});
+            } else {
+                printTile(square.pipe.char);
+            }
+        }
+
+        std.debug.print("\n", .{});
+    }
 }
 
 fn isValidNeighbor(pipe: Pipe, self: Pipe, x_u: usize, y_u: usize, x2_u: usize, y2_u: usize) bool {
@@ -92,7 +140,7 @@ fn isValidNeighbor(pipe: Pipe, self: Pipe, x_u: usize, y_u: usize, x2_u: usize, 
 }
 
 fn getNeighbors(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !std.ArrayList(Square) {
-    var neighbors = std.ArrayList(Square).init(std.heap.page_allocator);
+    var neighbors = std.ArrayList(Square).init(std.heap.c_allocator);
 
     const minX = if (x > 0) x - 1 else x;
     const minY = if (y > 0) y - 1 else y;
@@ -130,14 +178,19 @@ fn getNeighbors(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) 
     return neighbors;
 }
 
-fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !u32 {
+const Result = struct {
+    value: u32,
+    last: *Square,
+};
+
+fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !Result {
     // const neighbors = try getNeighbors(grid, x, y);
     // for (neighbors.items) |neighbor| {
     //     std.debug.print("({d}, {d})\n", .{ neighbor.x, neighbor.y });
     // }
 
     var max: u32 = 0;
-    var queue = Queue(*Square).init(std.heap.page_allocator);
+    var queue = Queue(*Square).init(std.heap.c_allocator);
     var last: ?*Square = null;
     try queue.enqueue(&grid.items[y].items[x]);
 
@@ -151,16 +204,19 @@ fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !u3
                 continue;
             }
             // std.debug.print("\tVisiting neighbor ({d}, {d})\n", .{ neighbor.x, neighbor.y });
-            // printGridPos(grid, neighbor.x, neighbor.y);
+            // printGridPos(grid, neighbor.x, neighbor.y, false);
             grid.items[neighbor.y].items[neighbor.x].parent = vertex;
-            grid.items[vertex.y].items[vertex.x].visited = true;
+            grid.items[neighbor.y].items[neighbor.x].visited = true;
 
             try queue.enqueue(&grid.items[neighbor.y].items[neighbor.x]);
         }
 
+        grid.items[vertex.y].items[vertex.x].visited = true;
+
         last = vertex;
     }
 
+    var final = last;
     if (last != null) {
         var current = last;
         while (current != null) {
@@ -168,7 +224,7 @@ fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !u3
             current = current.?.parent;
         }
 
-        std.debug.print("\n", .{});
+        // std.debug.print("\n", .{});
     }
 
     // for (neighbors.items) |neighbor| {
@@ -182,12 +238,63 @@ fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !u3
     //     max += 1 + try floodFill(grid, visited, neighbor.x, neighbor.y);
     // }
 
-    return max - 1;
+    max -= 1;
+    grid.items[y].items[x].parent = final;
+    return Result{ .value = max, .last = final.? };
+}
+
+fn deepTrace(grid: std.ArrayList(std.ArrayList(Square)), s_x: usize, s_y: usize) !std.ArrayList(*Square) {
+    var result = std.ArrayList(*Square).init(std.heap.c_allocator);
+    try result.append(&grid.items[s_y].items[s_x]);
+
+    const neighbors = try getNeighbors(grid, s_x, s_y);
+    for (neighbors.items) |neighbor| {
+        if (grid.items[neighbor.y].items[neighbor.x].visited) {
+            continue;
+        }
+
+        grid.items[neighbor.y].items[neighbor.x].visited = true;
+        const next = try deepTrace(grid, neighbor.x, neighbor.y);
+        for (next.items) |item| {
+            try result.append(item);
+        }
+    }
+
+    return result;
+}
+
+fn shoelace(list: std.ArrayList(*Square)) i32 {
+    var area: i32 = 0;
+    var t: usize = 0;
+    for (list.items, 0..) |item, i| {
+        //std.debug.print("({d}, {d})\n", .{ item.x, item.y });
+        const y_u = item.y;
+
+        const y1 = @as(i16, @intCast(y_u));
+
+        const next = if (i == list.items.len - 1) list.items[0] else list.items[i + 1];
+        const prev = if (i == 0) list.items[list.items.len - 1] else list.items[i - 1];
+        const n_x = @as(i32, @intCast(next.x));
+        const p_x = @as(i32, @intCast(prev.x));
+
+        const val = y1 * (p_x - n_x);
+        // std.debug.print("\t{d}({d} - {d}) = {d}\n", .{ y1, p_x, n_x, val });
+        area += val;
+        t += 1;
+    }
+
+    // std.debug.print("\n", .{});
+
+    std.debug.print("Traversed {d} points\n", .{t});
+
+    const div = @divTrunc(area, 2);
+
+    return if (div < 0) -div else div;
 }
 
 pub fn main() !void {
     const file = @embedFile("inputs/day10.txt");
-    var allocator = std.heap.page_allocator;
+    var allocator = std.heap.c_allocator;
     const lines = try String.split(allocator, file, "\n");
     defer lines.deinit();
 
@@ -211,12 +318,33 @@ pub fn main() !void {
         try grid.append(row);
     }
 
-    printGrid(grid);
+    // printGrid(grid);
     std.debug.print("Starts at {d}\n", .{starting_point});
 
     const result = try floodFill(grid, starting_point[0], starting_point[1]);
 
-    std.debug.print("Result: {d}\n", .{result});
+    std.debug.print("Part 1: {d}\n", .{result.value});
+
+    // printGridRejectInvalidNeighbors(grid);
+
+    // try printGridColorLines(grid, result.last);
+    for (grid.items, 0..) |line, y| {
+        for (line.items, 0..) |_, x| {
+            grid.items[y].items[x].visited = false;
+        }
+    }
+
+    grid.items[starting_point[1]].items[starting_point[0]].visited = true;
+    std.debug.print("Running deep trace...\n", .{});
+    const full_list = try deepTrace(grid, starting_point[0], starting_point[1]);
+    std.debug.print("Vertexes: {d}\n", .{full_list.items.len});
+
+    const A = shoelace(full_list);
+    const b = @as(i16, @intCast(full_list.items.len));
+    std.debug.print("A = {d}, b = {d}\n", .{ A, b });
+
+    const p2_result = A - @divFloor(b, 2) + 1;
+    std.debug.print("Part 2 = {d}\n", .{p2_result});
 
     // const x: usize = 0;
     // const y: usize = 4;
