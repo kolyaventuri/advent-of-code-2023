@@ -139,7 +139,7 @@ fn isValidNeighbor(pipe: Pipe, self: Pipe, x_u: usize, y_u: usize, x2_u: usize, 
     return false;
 }
 
-fn getNeighbors(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !std.ArrayList(Square) {
+fn getNeighbors(grid: *const std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !std.ArrayList(Square) {
     var neighbors = std.ArrayList(Square).init(std.heap.c_allocator);
 
     const minX = if (x > 0) x - 1 else x;
@@ -150,9 +150,6 @@ fn getNeighbors(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) 
 
     const self = grid.items[y].items[x];
 
-    // std.debug.print("Get neighbors of ({d}, {d})\n", .{ x, y });
-    // std.debug.print("minY: {d}, minX: {d}\n", .{ minY, minX });
-    // std.debug.print("maxY: {d}, maxX: {d}\n", .{ maxY, maxX });
     for (grid.items[minY..maxY], minY..) |line, y2| {
         for (line.items[minX..maxX], minX..) |square, x2| {
             const pipe = square.pipe;
@@ -171,10 +168,6 @@ fn getNeighbors(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) 
         }
     }
 
-    // for (neighbors.items) |neighbor| {
-    //     std.debug.print("({d}, {d})\n", .{ neighbor.x, neighbor.y });
-    // }
-
     return neighbors;
 }
 
@@ -184,11 +177,6 @@ const Result = struct {
 };
 
 fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !Result {
-    // const neighbors = try getNeighbors(grid, x, y);
-    // for (neighbors.items) |neighbor| {
-    //     std.debug.print("({d}, {d})\n", .{ neighbor.x, neighbor.y });
-    // }
-
     var max: u32 = 0;
     var queue = Queue(*Square).init(std.heap.c_allocator);
     var last: ?*Square = null;
@@ -197,7 +185,7 @@ fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !Re
     while (queue.end != null) {
         var vertex = queue.dequeue().?;
 
-        var neighbors = try getNeighbors(grid, vertex.x, vertex.y);
+        var neighbors = try getNeighbors(&grid, vertex.x, vertex.y);
         // std.debug.print("At ({d}, {d})\n", .{ vertex.x, vertex.y });
         for (neighbors.items) |neighbor| {
             if (neighbor.visited) {
@@ -223,41 +211,40 @@ fn floodFill(grid: std.ArrayList(std.ArrayList(Square)), x: usize, y: usize) !Re
             max += 1;
             current = current.?.parent;
         }
-
-        // std.debug.print("\n", .{});
     }
-
-    // for (neighbors.items) |neighbor| {
-    //     if (did_visit) {
-    //         continue;
-    //     }
-    //     visited.items[neighbor.y].items[neighbor.x] = true;
-
-    //     // std.debug.print("Visiting ({d}, {d})\n", .{ neighbor.x, neighbor.y });
-    //     printGridPos(grid, neighbor.x, neighbor.y);
-    //     max += 1 + try floodFill(grid, visited, neighbor.x, neighbor.y);
-    // }
 
     max -= 1;
     grid.items[y].items[x].parent = final;
     return Result{ .value = max, .last = final.? };
 }
 
-fn deepTrace(grid: std.ArrayList(std.ArrayList(Square)), s_x: usize, s_y: usize) !std.ArrayList(*Square) {
+fn deepTrace(grid: *const std.ArrayList(std.ArrayList(Square)), s_x: usize, s_y: usize) !std.ArrayList(*Square) {
     var result = std.ArrayList(*Square).init(std.heap.c_allocator);
     try result.append(&grid.items[s_y].items[s_x]);
 
-    const neighbors = try getNeighbors(grid, s_x, s_y);
-    for (neighbors.items) |neighbor| {
-        if (grid.items[neighbor.y].items[neighbor.x].visited) {
-            continue;
+    var current: *Square = &grid.items[s_y].items[s_x];
+    var current_neighbors = try getNeighbors(grid, current.x, current.y);
+    while (current_neighbors.items.len > 0) {
+        var neighbors = try getNeighbors(grid, current.x, current.y);
+        defer neighbors.deinit();
+
+        var next: ?*Square = null;
+        for (neighbors.items) |neighbor| {
+            if (grid.items[neighbor.y].items[neighbor.x].visited) {
+                continue;
+            }
+
+            grid.items[neighbor.y].items[neighbor.x].visited = true;
+            next = &grid.items[neighbor.y].items[neighbor.x];
+            break;
         }
 
-        grid.items[neighbor.y].items[neighbor.x].visited = true;
-        const next = try deepTrace(grid, neighbor.x, neighbor.y);
-        for (next.items) |item| {
-            try result.append(item);
+        if (next == null) {
+            break;
         }
+
+        try result.append(next.?);
+        current = next.?;
     }
 
     return result;
@@ -265,7 +252,6 @@ fn deepTrace(grid: std.ArrayList(std.ArrayList(Square)), s_x: usize, s_y: usize)
 
 fn shoelace(list: std.ArrayList(*Square)) i32 {
     var area: i32 = 0;
-    var t: usize = 0;
     for (list.items, 0..) |item, i| {
         //std.debug.print("({d}, {d})\n", .{ item.x, item.y });
         const y_u = item.y;
@@ -280,12 +266,9 @@ fn shoelace(list: std.ArrayList(*Square)) i32 {
         const val = y1 * (p_x - n_x);
         // std.debug.print("\t{d}({d} - {d}) = {d}\n", .{ y1, p_x, n_x, val });
         area += val;
-        t += 1;
     }
 
     // std.debug.print("\n", .{});
-
-    std.debug.print("Traversed {d} points\n", .{t});
 
     const div = @divTrunc(area, 2);
 
@@ -319,15 +302,13 @@ pub fn main() !void {
     }
 
     // printGrid(grid);
-    std.debug.print("Starts at {d}\n", .{starting_point});
-
     const result = try floodFill(grid, starting_point[0], starting_point[1]);
 
     std.debug.print("Part 1: {d}\n", .{result.value});
 
     // printGridRejectInvalidNeighbors(grid);
 
-    // try printGridColorLines(grid, result.last);
+    //try printGridColorLines(grid, result.last);
     for (grid.items, 0..) |line, y| {
         for (line.items, 0..) |_, x| {
             grid.items[y].items[x].visited = false;
@@ -335,23 +316,11 @@ pub fn main() !void {
     }
 
     grid.items[starting_point[1]].items[starting_point[0]].visited = true;
-    std.debug.print("Running deep trace...\n", .{});
-    const full_list = try deepTrace(grid, starting_point[0], starting_point[1]);
-    std.debug.print("Vertexes: {d}\n", .{full_list.items.len});
+    const full_list = try deepTrace(&grid, starting_point[0], starting_point[1]);
 
     const A = shoelace(full_list);
     const b = @as(i16, @intCast(full_list.items.len));
-    std.debug.print("A = {d}, b = {d}\n", .{ A, b });
-
     const p2_result = A - @divFloor(b, 2) + 1;
+
     std.debug.print("Part 2 = {d}\n", .{p2_result});
-
-    // const x: usize = 0;
-    // const y: usize = 4;
-    // const neighbors = try getNeighbors(grid, x, y);
-
-    // printGridPos(grid, x, y);
-    // for (neighbors.items) |neighbor| {
-    //     std.debug.print("({d}, {d})\n", .{ neighbor.x, neighbor.y });
-    // }
 }
